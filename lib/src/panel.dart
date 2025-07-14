@@ -399,6 +399,7 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
   bool _isHorizontalScrollableWidget = false;
   Axis? _scrollableAxis;
   bool _isOverScrollableWidget = false;
+  bool _didDragPanel = false;
 
   // Check if the hit test path contains scrollable render objects
   bool _isHitOverScrollableWidget(Iterable<HitTestEntry> path) {
@@ -436,6 +437,7 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
         // Reset state
         _isOverScrollableWidget = false;
         _scrollableAxis = null;
+        _didDragPanel = false;
         
         if (_panelPosition == 1) {
           _scMinffset = 0.0;
@@ -499,6 +501,10 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
         if (shouldDragPanel) {
           _vt.addPosition(e.timeStamp, e.position); // add current position for velocity tracking
           _onGestureSlide(e.delta.dy);
+        } else {
+          // If we're not dragging the panel, don't track velocity for panel gestures
+          // This prevents scroll velocity from affecting panel fling behavior
+          _vt = VelocityTracker.withKind(PointerDeviceKind.touch);
         }
       },
       onPointerUp: (PointerUpEvent e) {
@@ -522,6 +528,7 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
     
     // Always allow panel movement when force draggable is true or when not over a scrollable widget
     if (widget.controller?._nowTargetForceDraggable == true || !_isOverScrollableWidget) {
+      _didDragPanel = true;
       if (widget.slideDirection == SlideDirection.UP)
         _ac.value -= dy / (widget.maxHeight - widget.minHeight);
       else
@@ -545,6 +552,13 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
     if (widget.controller?._nowTargetForceDraggable == false && widget.disableDraggableOnScrolling) {
       return;
     }
+    
+    // Don't process panel gestures if we didn't actually drag the panel during this gesture
+    // This prevents scroll velocity from triggering panel movements
+    if (!_didDragPanel && widget.controller?._nowTargetForceDraggable != true) {
+      return;
+    }
+    
     double minFlingVelocity = 365.0;
     double kSnap = 8;
 
