@@ -401,20 +401,57 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
   bool _isOverScrollableWidget = false;
   bool _didDragPanel = false;
 
-  // Check if the hit test path contains scrollable render objects
+  // Check if the hit test path contains scrollable render objects or is within a scrollable container
   bool _isHitOverScrollableWidget(Iterable<HitTestEntry> path) {
     for (final entry in path) {
       if (entry.target is RenderObject) {
         final renderObject = entry.target as RenderObject;
         final typeName = renderObject.runtimeType.toString();
-        
+
         // Check for common scrollable render objects
         if (typeName.contains('RenderSliverList') ||
             typeName.contains('RenderSliverGrid') ||
             typeName.contains('RenderListBody') ||
             typeName.contains('RenderSliverMultiBoxAdaptor') ||
-            typeName.contains('RenderViewport')) {
+            typeName.contains('RenderViewport') ||
+            typeName.contains('_RenderScrollSemantics') ||
+            typeName.contains('RenderScrollSemantics')) {
           return true;
+        }
+      }
+    }
+
+    // If we didn't find a direct scrollable render object, check if we're inside a scrollable container
+    return _isWithinScrollableContainer(path);
+  }
+
+  // Check if the hit is within a scrollable container by walking up the render tree
+  bool _isWithinScrollableContainer(Iterable<HitTestEntry> path) {
+    for (final entry in path) {
+      if (entry.target is RenderObject) {
+        RenderObject? current = entry.target as RenderObject;
+
+        // Walk up the parent chain to find a scrollable container
+        while (current != null) {
+          final typeName = current.runtimeType.toString();
+
+          // Check for scrollable containers - expanded list
+          if (typeName.contains('RenderSliverList') ||
+              typeName.contains('RenderSliverGrid') ||
+              typeName.contains('RenderListBody') ||
+              typeName.contains('RenderSliverMultiBoxAdaptor') ||
+              typeName.contains('RenderViewport') ||
+              typeName.contains('RenderScrollable') ||
+              typeName.contains('RenderCustomScrollView') ||
+              typeName.contains('RenderListView') ||
+              typeName.contains('RenderSliverFixedExtentList') ||
+              typeName.contains('RenderSliverPrototypeExtentList') ||
+              typeName.contains('_RenderScrollSemantics') ||
+              typeName.contains('RenderScrollSemantics')) {
+            return true;
+          }
+
+          current = current.parent;
         }
       }
     }
@@ -438,11 +475,11 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
         _isOverScrollableWidget = false;
         _scrollableAxis = null;
         _didDragPanel = false;
-        
+
         if (_panelPosition == 1) {
           _scMinffset = 0.0;
         }
-        
+
         // Check for special wrapper widgets first
         if (result.path.any((entry) => entry.target.runtimeType == _ForceDraggableWidgetRenderBox)) {
           widget.controller?._nowTargetForceDraggable = true;
@@ -465,11 +502,12 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
         } else {
           // Check if we're over a scrollable widget
           _isOverScrollableWidget = _isHitOverScrollableWidget(result.path);
+
           widget.controller?._nowTargetForceDraggable = false;
           _isHorizontalScrollableWidget = false;
           _ignoreScrollable = false;
         }
-        
+
         _vt.addPosition(e.timeStamp, e.position);
       },
       onPointerMove: (PointerMoveEvent e) {
@@ -488,16 +526,17 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
         }
 
         if (_ignoreScrollable) return;
-        
+
         // Check if we should allow panel dragging
         bool shouldDragPanel = true;
-        
+
         if (_isOverScrollableWidget && _scrollableAxis == Axis.vertical) {
           // We're over a scrollable widget with vertical movement
-          // Don't drag the panel, let the scrollable handle it
+          // Always prevent panel dragging when over scrollable content to ensure consistent behavior
+          // This includes separators, dividers, and other elements within scrollable containers
           shouldDragPanel = false;
         }
-        
+
         if (shouldDragPanel) {
           _vt.addPosition(e.timeStamp, e.position); // add current position for velocity tracking
           _onGestureSlide(e.delta.dy);
@@ -525,7 +564,7 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
     if (widget.controller?._nowTargetForceDraggable == false && widget.disableDraggableOnScrolling) {
       return;
     }
-    
+
     // Always allow panel movement when force draggable is true or when not over a scrollable widget
     if (widget.controller?._nowTargetForceDraggable == true || !_isOverScrollableWidget) {
       _didDragPanel = true;
@@ -552,13 +591,13 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
     if (widget.controller?._nowTargetForceDraggable == false && widget.disableDraggableOnScrolling) {
       return;
     }
-    
+
     // Don't process panel gestures if we didn't actually drag the panel during this gesture
     // This prevents scroll velocity from triggering panel movements
     if (!_didDragPanel && widget.controller?._nowTargetForceDraggable != true) {
       return;
     }
-    
+
     double minFlingVelocity = 365.0;
     double kSnap = 8;
 
